@@ -279,14 +279,36 @@ function displayHomeProducts(products) {
   const container = document.getElementById("productsContainer");
   if (!container) return;
   container.innerHTML = "";
+  
+  // Show first 8 products right away
+  const firstBatch = products.slice(0, 8);
+  renderProductBatch(firstBatch, container);
+  
+  // Render remaining products in chunks to avoid freezing
+  if (products.length > 8) {
+    const remaining = products.slice(8);
+    let index = 0;
+    const chunkSize = 8;
+    function renderNextChunk() {
+      const chunk = remaining.slice(index, index + chunkSize);
+      renderProductBatch(chunk, container);
+      index += chunkSize;
+      if (index < remaining.length) {
+        setTimeout(renderNextChunk, 50); // yield to browser
+      }
+    }
+    setTimeout(renderNextChunk, 100);
+  }
+}
+
+function renderProductBatch(products, container) {
   products.forEach(product => {
     const card = document.createElement("div");
     card.classList.add("product-card");
     card.setAttribute("data-product-id", product.id);
     card.onclick = () => openProductById(product.id);
-    // Add decoding="async" and loading="lazy" for faster perceived load
     card.innerHTML = `
-      <img src="${product.mainImage}" alt="${product.name}" loading="lazy" decoding="async">
+      <img src="${product.mainImage}" alt="${product.name}" loading="lazy" decoding="async" fetchpriority="low">
       <div class="product-info">
         <div class="product-name">${escapeHtml(product.name)}</div>
         <div class="product-price">$${product.price}</div>
@@ -295,7 +317,6 @@ function displayHomeProducts(products) {
     container.appendChild(card);
   });
 }
-
 function openProductById(id) {
   const product = allProducts.find(p => p.id == id);
   if (product) openProduct(product);
