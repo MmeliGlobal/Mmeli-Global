@@ -1,3 +1,30 @@
+// ==================== SUPABASE SETUP (YOUR CREDENTIALS) ====================
+const SUPABASE_URL = "https://ceyrltlpxfyfriwzfdqt.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_nsXB_KjMeLGBGWIqqYFJuA_CPPIAK2-";
+
+let supabaseClient = null;
+let useSupabase = false;
+
+function loadSupabase() {
+  if (!SUPABASE_URL || SUPABASE_URL === "YOUR_SUPABASE_URL") {
+    console.warn("Supabase not configured. Using demo products.");
+    loadDemoProducts();
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+  script.onload = () => {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    useSupabase = true;
+    loadProducts();
+  };
+  script.onerror = () => {
+    console.error("Failed to load Supabase. Using demo products.");
+    loadDemoProducts();
+  };
+  document.head.appendChild(script);
+}
+
 // ==================== GLOBAL VARIABLES ====================
 let allProducts = [];
 let currentProduct = null;
@@ -155,7 +182,22 @@ function shuffleArray(arr) {
   return arr;
 }
 
-// ==================== LOAD DEMO PRODUCTS (fallback) ====================
+// ==================== LOAD PRODUCTS FROM SUPABASE ====================
+async function loadProducts() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from('products')
+    .select('*');
+  if (error) {
+    console.error("Supabase error:", error);
+    loadDemoProducts();
+  } else {
+    allProducts = data || [];
+    allProducts = shuffleArray(allProducts);
+    afterLoad();
+  }
+}
+
 function loadDemoProducts() {
   const stored = localStorage.getItem('customProducts');
   if (stored) {
@@ -192,7 +234,46 @@ function loadDemoProducts() {
   afterLoad();
 }
 
-function saveProducts() {
+async function saveProduct(product) {
+  if (!useSupabase) {
+    const index = allProducts.findIndex(p => p.id == product.id);
+    if (index !== -1) allProducts[index] = product;
+    else allProducts.push(product);
+    saveProductsToLocal();
+    return product;
+  }
+  if (!product.id || product.id === 0) {
+    const { data, error } = await supabaseClient
+      .from('products')
+      .insert([product])
+      .select();
+    if (error) { console.error(error); return null; }
+    return data ? data[0] : null;
+  } else {
+    const { error } = await supabaseClient
+      .from('products')
+      .update(product)
+      .eq('id', product.id);
+    if (error) { console.error(error); return null; }
+    return product;
+  }
+}
+
+async function deleteProductFromDB(id) {
+  if (!useSupabase) {
+    allProducts = allProducts.filter(p => p.id != id);
+    saveProductsToLocal();
+    return true;
+  }
+  const { error } = await supabaseClient
+    .from('products')
+    .delete()
+    .eq('id', id);
+  if (error) { console.error(error); return false; }
+  return true;
+}
+
+function saveProductsToLocal() {
   localStorage.setItem('customProducts', JSON.stringify(allProducts));
 }
 
@@ -206,22 +287,17 @@ function afterLoad() {
   renderCart();
 }
 
-// ==================== CHUNKED RENDERING (speed optimisation) ====================
+// ==================== CHUNKED RENDERING (SPEED OPTIMISATION) ====================
 function displayHomeProducts(products) {
   const container = document.getElementById("productsContainer");
   if (!container) return;
   container.innerHTML = "";
-  
   if (products.length === 0) {
     container.innerHTML = "<p>No products found.</p>";
     return;
   }
-  
-  // Show first batch immediately
   const firstBatch = products.slice(0, 8);
   renderProductBatch(firstBatch, container);
-  
-  // Render remaining in chunks to avoid blocking UI
   if (products.length > 8) {
     const remaining = products.slice(8);
     let index = 0;
@@ -230,9 +306,7 @@ function displayHomeProducts(products) {
       const chunk = remaining.slice(index, index + chunkSize);
       renderProductBatch(chunk, container);
       index += chunkSize;
-      if (index < remaining.length) {
-        setTimeout(renderNextChunk, 50);
-      }
+      if (index < remaining.length) setTimeout(renderNextChunk, 50);
     }
     setTimeout(renderNextChunk, 100);
   }
@@ -244,13 +318,8 @@ function renderProductBatch(products, container) {
     card.classList.add("product-card");
     card.setAttribute("data-product-id", product.id);
     card.onclick = () => openProductById(product.id);
-    
-    // Use smaller Imgur thumbnail if possible
     let imgUrl = product.mainImage;
-    if (imgUrl.includes('i.imgur.com') && !imgUrl.includes('?')) {
-      imgUrl += '?width=300';
-    }
-    
+    if (imgUrl.includes('i.imgur.com') && !imgUrl.includes('?')) imgUrl += '?width=300';
     card.innerHTML = `
       <img src="${imgUrl}" alt="${product.name}" loading="lazy" decoding="async" fetchpriority="low" class="loading">
       <div class="product-info">
@@ -259,15 +328,13 @@ function renderProductBatch(products, container) {
       </div>
     `;
     container.appendChild(card);
-    
-    // Remove skeleton loader when image loads
     const img = card.querySelector('img');
     img.onload = () => img.classList.remove('loading');
-    img.onerror = () => img.classList.remove('loading'); // in case of broken image
+    img.onerror = () => img.classList.remove('loading');
   });
 }
 
-// ==================== DISPLAY FUNCTIONS ====================
+// ==================== OPEN PRODUCT ====================
 function openProductById(id) {
   const product = allProducts.find(p => p.id == id);
   if (product) openProduct(product);
@@ -646,7 +713,7 @@ function updateOrderStatus(trackingCode) {
   }
 }
 
-function addProduct() {
+async function addProduct() {
   const name = document.getElementById("newName").value;
   const price = parseFloat(document.getElementById("newPrice").value);
   const image = document.getElementById("newImage").value;
@@ -675,7 +742,6 @@ function addProduct() {
   let subImages = extraImages ? extraImages.split(',').map(url => url.trim()).filter(u => u) : [];
 
   const newProduct = {
-    id: Date.now(),
     name: name,
     desc: desc || "Added by admin",
     cat: category,
@@ -686,14 +752,25 @@ function addProduct() {
     mainImage: image,
     subImages: subImages
   };
-  allProducts.push(newProduct);
-  allProducts = shuffleArray(allProducts);
-  saveProducts();
-  displayHomeProducts(allProducts);
-  loadAdminSummaries();
-  loadProductsFull();
-  alert("Product added!");
-  // Clear form
+  const inserted = await saveProduct(newProduct);
+  if (inserted) {
+    allProducts.push(inserted);
+    allProducts = shuffleArray(allProducts);
+    displayHomeProducts(allProducts);
+    loadAdminSummaries();
+    loadProductsFull();
+    alert("Product added!");
+  } else if (useSupabase) {
+    alert("Failed to add product to Supabase.");
+  } else {
+    newProduct.id = Date.now();
+    allProducts.push(newProduct);
+    allProducts = shuffleArray(allProducts);
+    displayHomeProducts(allProducts);
+    loadAdminSummaries();
+    loadProductsFull();
+    alert("Product added locally.");
+  }
   document.getElementById("newName").value = "";
   document.getElementById("newPrice").value = "";
   document.getElementById("newImage").value = "";
@@ -706,7 +783,7 @@ function addProduct() {
   switchPage("adminDashboard");
 }
 
-function editProduct(id) {
+async function editProduct(id) {
   const product = allProducts.find(p => p.id == id);
   if (!product) return;
   editProductId = id;
@@ -726,7 +803,7 @@ function editProduct(id) {
   switchPage("adminAddProductPage");
 }
 
-function updateProduct() {
+async function updateProduct() {
   const name = document.getElementById("newName").value;
   const price = parseFloat(document.getElementById("newPrice").value);
   const image = document.getElementById("newImage").value;
@@ -766,15 +843,26 @@ function updateProduct() {
     mainImage: image,
     subImages: subImages
   };
-  const index = allProducts.findIndex(p => p.id == editProductId);
-  if (index !== -1) allProducts[index] = updatedProduct;
-  allProducts = shuffleArray(allProducts);
-  saveProducts();
-  displayHomeProducts(allProducts);
-  loadAdminSummaries();
-  loadProductsFull();
-  alert("Product updated.");
-  // Reset form
+  const saved = await saveProduct(updatedProduct);
+  if (saved) {
+    const index = allProducts.findIndex(p => p.id == editProductId);
+    if (index !== -1) allProducts[index] = saved;
+    allProducts = shuffleArray(allProducts);
+    displayHomeProducts(allProducts);
+    loadAdminSummaries();
+    loadProductsFull();
+    alert("Product updated.");
+  } else if (useSupabase) {
+    alert("Update failed.");
+  } else {
+    const index = allProducts.findIndex(p => p.id == editProductId);
+    if (index !== -1) allProducts[index] = updatedProduct;
+    allProducts = shuffleArray(allProducts);
+    displayHomeProducts(allProducts);
+    loadAdminSummaries();
+    loadProductsFull();
+    alert("Product updated locally.");
+  }
   document.getElementById("newName").value = "";
   document.getElementById("newPrice").value = "";
   document.getElementById("newImage").value = "";
@@ -791,15 +879,19 @@ function updateProduct() {
   switchPage("adminDashboard");
 }
 
-function deleteProduct(id) {
+async function deleteProduct(id) {
   if (confirm("Are you sure you want to delete this product?")) {
-    allProducts = allProducts.filter(p => p.id != id);
-    allProducts = shuffleArray(allProducts);
-    saveProducts();
-    displayHomeProducts(allProducts);
-    loadAdminSummaries();
-    loadProductsFull();
-    alert("Product deleted.");
+    const success = await deleteProductFromDB(id);
+    if (success) {
+      allProducts = allProducts.filter(p => p.id != id);
+      allProducts = shuffleArray(allProducts);
+      displayHomeProducts(allProducts);
+      loadAdminSummaries();
+      loadProductsFull();
+      alert("Product deleted.");
+    } else {
+      alert("Delete failed.");
+    }
   }
 }
 
@@ -1369,7 +1461,7 @@ document.getElementById("logoArea")?.addEventListener("dblclick", () => {
 
 // ==================== INIT ====================
 window.onload = () => {
-  loadDemoProducts();
+  loadSupabase();
   updateCartCount();
   renderCart();
   const savedSiteName = localStorage.getItem('siteName');
