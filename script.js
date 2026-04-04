@@ -1,6 +1,6 @@
 // ==================== SUPABASE SETUP ====================
 const SUPABASE_URL = "https://ceyrltlpxfyfriwzfdqt.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_nsXB_KjMeLGBGWIqqYFJuA_CPPIAK2-";  // <-- REPLACE THIS with your actual anon key
+const SUPABASE_ANON_KEY = "sb_publishable_nsXB_KjMeLGBGWIqqYFJuA_CPPIAK2-";  // <-- REPLACE with your actual anon key
 
 let supabaseClient = null;
 let useSupabase = false;
@@ -53,6 +53,7 @@ function loadDemoProducts() {
       subImages: []
     }
   ];
+  shuffleArray(allProducts);
   afterLoad();
 }
 
@@ -204,18 +205,28 @@ let lastClickedMainCat = "";
 let loggedInUser = JSON.parse(localStorage.getItem('user') || 'null');
 let editProductId = null;
 
+// ==================== HELPER: SHUFFLE ARRAY (Fisher-Yates) ====================
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 // ==================== LOAD PRODUCTS FROM SUPABASE ====================
 async function loadProducts() {
   if (!supabaseClient) return;
   const { data, error } = await supabaseClient
     .from('products')
-    .select('*')
-    .order('id', { ascending: true });
+    .select('*');
   if (error) {
     console.error("Supabase error:", error);
     loadDemoProducts();
   } else {
     allProducts = data || [];
+    // Shuffle products after fetching
+    allProducts = shuffleArray(allProducts);
     afterLoad();
   }
 }
@@ -263,7 +274,7 @@ async function deleteProductFromDB(id) {
   return true;
 }
 
-// ==================== DISPLAY HOME PRODUCTS ====================
+// ==================== DISPLAY HOME PRODUCTS (with lazy loading & async decode) ====================
 function displayHomeProducts(products) {
   const container = document.getElementById("productsContainer");
   if (!container) return;
@@ -273,8 +284,9 @@ function displayHomeProducts(products) {
     card.classList.add("product-card");
     card.setAttribute("data-product-id", product.id);
     card.onclick = () => openProductById(product.id);
+    // Add decoding="async" and loading="lazy" for faster perceived load
     card.innerHTML = `
-      <img src="${product.mainImage}" alt="${product.name}" loading="lazy">
+      <img src="${product.mainImage}" alt="${product.name}" loading="lazy" decoding="async">
       <div class="product-info">
         <div class="product-name">${escapeHtml(product.name)}</div>
         <div class="product-price">$${product.price}</div>
@@ -314,6 +326,8 @@ function openProduct(product) {
       if (img && img.trim()) {
         const imgEl = document.createElement("img");
         imgEl.src = img;
+        imgEl.loading = "lazy";
+        imgEl.decoding = "async";
         imgEl.onclick = () => changeMainImage(img, imgEl);
         if (idx === 0) imgEl.classList.add("active");
         subContainer.appendChild(imgEl);
@@ -394,7 +408,7 @@ function renderCart() {
     total += item.price;
     html += `
       <div class="cart-item">
-        <div><img src="${item.image}" width="50" height="50" style="object-fit:cover; border-radius:8px;"> ${escapeHtml(item.name)} (${escapeHtml(item.size)}, ${escapeHtml(item.color)})</div>
+        <div><img src="${item.image}" width="50" height="50" style="object-fit:cover; border-radius:8px;" loading="lazy" decoding="async"> ${escapeHtml(item.name)} (${escapeHtml(item.size)}, ${escapeHtml(item.color)})</div>
         <div>$${item.price.toFixed(2)} <button style="width:auto; padding:4px 12px;" onclick="removeFromCart(${idx})">Remove</button></div>
       </div>
     `;
@@ -702,6 +716,8 @@ async function addProduct() {
   const inserted = await saveProduct(newProduct);
   if (inserted) {
     allProducts.push(inserted);
+    // Shuffle again after adding
+    allProducts = shuffleArray(allProducts);
     displayHomeProducts(allProducts);
     loadAdminSummaries();
     loadProductsFull();
@@ -711,6 +727,7 @@ async function addProduct() {
   } else {
     newProduct.id = Date.now();
     allProducts.push(newProduct);
+    allProducts = shuffleArray(allProducts);
     displayHomeProducts(allProducts);
     loadAdminSummaries();
     loadProductsFull();
@@ -792,6 +809,7 @@ async function updateProduct() {
   if (saved) {
     const index = allProducts.findIndex(p => p.id == editProductId);
     if (index !== -1) allProducts[index] = saved;
+    allProducts = shuffleArray(allProducts);
     displayHomeProducts(allProducts);
     loadAdminSummaries();
     loadProductsFull();
@@ -801,6 +819,7 @@ async function updateProduct() {
   } else {
     const index = allProducts.findIndex(p => p.id == editProductId);
     if (index !== -1) allProducts[index] = updatedProduct;
+    allProducts = shuffleArray(allProducts);
     displayHomeProducts(allProducts);
     loadAdminSummaries();
     loadProductsFull();
@@ -828,6 +847,7 @@ async function deleteProduct(id) {
       const success = await deleteProductFromDB(id);
       if (success) {
         allProducts = allProducts.filter(p => p.id != id);
+        allProducts = shuffleArray(allProducts);
         displayHomeProducts(allProducts);
         loadAdminSummaries();
         loadProductsFull();
@@ -837,6 +857,7 @@ async function deleteProduct(id) {
       }
     } else {
       allProducts = allProducts.filter(p => p.id != id);
+      allProducts = shuffleArray(allProducts);
       displayHomeProducts(allProducts);
       loadAdminSummaries();
       loadProductsFull();
@@ -1126,7 +1147,7 @@ function loadShipments() {
       <strong>Tracking:</strong> ${escapeHtml(s.trackingCode)}<br>
       <strong>Client:</strong> ${escapeHtml(s.client.name)}<br>
       <strong>Receiver:</strong> ${escapeHtml(s.receiver.name)}<br>
-      ${s.image ? `<img src="${s.image}" style="max-width:100px;">` : ''}<br>
+      ${s.image ? `<img src="${s.image}" style="max-width:100px;" loading="lazy">` : ''}<br>
       <button onclick="markAsPaid('${s.trackingCode}')">Mark Paid</button>
       <button onclick="markAsShippedShipment('${s.trackingCode}')">Mark Shipped</button>
     </div>
@@ -1256,14 +1277,6 @@ function resetFilters() {
   filterProducts();
 }
 
-function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
 function loadMenu() {
   const menuDiv = document.getElementById("mainMenu");
   menuDiv.innerHTML = "";
@@ -1371,7 +1384,7 @@ function loadRecommendations(pageId) {
     card.className = "recommend-card";
     card.onclick = () => openProduct(prod);
     card.innerHTML = `
-      <img src="${prod.mainImage}" alt="${escapeHtml(prod.name)}">
+      <img src="${prod.mainImage}" alt="${escapeHtml(prod.name)}" loading="lazy" decoding="async">
       <p>${escapeHtml(prod.name)}<br><strong>$${prod.price}</strong></p>
     `;
     grid.appendChild(card);
