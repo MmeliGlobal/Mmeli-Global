@@ -599,8 +599,8 @@ button:hover {
 }
 /* Logo image style */
 .logo-image {
-  height: 40px;
-  width: auto;
+  height: auto;
+  width: 200px;
   display: block;
 }
 
