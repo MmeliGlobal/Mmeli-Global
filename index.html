@@ -341,64 +341,6 @@
   <div onclick="switchPage('promo')">🔥</div>
   <div onclick="switchPage('account')">👤</div>
 </nav>
-
-  <script>
-(function() {
-  // Find all "Add to Cart" buttons on the page
-  let addToCartButtons = document.querySelectorAll('button:contains("Add to Cart"), .add-to-cart, [class*="add-to-cart"]');
-  
-  // If the above doesn't find them, replace '.your-add-to-cart-class' with the actual class
-  if (addToCartButtons.length === 0) {
-    addToCartButtons = document.querySelectorAll('.your-add-to-cart-class'); // <-- CHANGE THIS
-  }
-  
-  addToCartButtons.forEach(cartBtn => {
-    // Find the product card container (parent of the button)
-    let card = cartBtn.closest('.product-card, .product, .item, [class*="product"], [class*="item"]');
-    if (!card) return;
-    
-    // Find the product link (title or image link)
-    let productLink = card.querySelector('a[href*="/product"], a[href*="/item"], a');
-    let productUrl = productLink ? productLink.href : window.location.origin + window.location.pathname;
-    let productTitle = card.querySelector('h2, h3, .title')?.innerText || 'Mmeli Global Product';
-    
-    // Create Share button
-    let shareBtn = document.createElement('button');
-    shareBtn.textContent = '📤 Share';
-    shareBtn.style.padding = '6px 12px';
-    shareBtn.style.backgroundColor = '#1877f2';
-    shareBtn.style.color = 'white';
-    shareBtn.style.border = 'none';
-    shareBtn.style.borderRadius = '4px';
-    shareBtn.style.cursor = 'pointer';
-    shareBtn.style.fontSize = '12px';
-    shareBtn.style.marginBottom = '8px';
-    shareBtn.style.display = 'block';
-    shareBtn.style.marginLeft = 'auto';  // pushes to the right
-    shareBtn.style.width = 'fit-content';
-    
-    // Insert Share button directly above the Add to Cart button
-    cartBtn.parentNode.insertBefore(shareBtn, cartBtn);
-    
-    // Share functionality
-    shareBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: productTitle,
-            text: 'Check out this product from Mmeli Global',
-            url: productUrl
-          });
-        } catch (err) {}
-      } else {
-        navigator.clipboard.writeText(productUrl);
-        alert('Product link copied to clipboard!');
-      }
-    });
-  });
-})();
-</script>
   
 <script src="script.js"></script>
 </body>
