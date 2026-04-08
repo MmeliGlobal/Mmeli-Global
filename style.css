@@ -603,6 +603,10 @@ button:hover {
   width: 200px;
   display: block;
 }
+.logo-area {
+  margin-left: 0;
+  padding-left: 0;
+}
 
 /* Hide text but keep for accessibility */
 .visually-hidden {
